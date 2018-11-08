@@ -28,7 +28,7 @@ func TestResolveIP(t *testing.T) {
 	assert(err, IsNil)
 	defer tcpServer.Close()
 
-	serverPort := pickPort()
+	serverPort := tcp.PickPort()
 	serverConfig := &core.Config{
 		App: []*serial.TypedMessage{
 			serial.ToTypedMessage(&dns.Config{
@@ -46,12 +46,14 @@ func TestResolveIP(t *testing.T) {
 								Prefix: 8,
 							},
 						},
-						Tag: "direct",
+						TargetTag: &router.RoutingRule_Tag{
+							Tag: "direct",
+						},
 					},
 				},
 			}),
 		},
-		Inbound: []*proxyman.InboundHandlerConfig{
+		Inbound: []*core.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortRange: net.SinglePortRange(serverPort),
@@ -67,7 +69,7 @@ func TestResolveIP(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*proxyman.OutboundHandlerConfig{
+		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&blackhole.Config{}),
 			},

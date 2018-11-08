@@ -18,9 +18,9 @@ func TestSRTPWrite(t *testing.T) {
 
 	srtp := srtpRaw.(*SRTP)
 
-	payload := buf.NewLocal(2048)
-	payload.AppendSupplier(srtp.Write)
-	payload.Append(content)
+	payload := buf.New()
+	srtp.Serialize(payload.Extend(srtp.Size()))
+	payload.Write(content)
 
-	assert(payload.Len(), Equals, len(content)+srtp.Size())
+	assert(payload.Len(), Equals, int32(len(content))+srtp.Size())
 }

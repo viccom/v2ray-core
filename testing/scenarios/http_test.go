@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
+	"time"
 
 	"v2ray.com/core/common"
 	"v2ray.com/core/common/buf"
@@ -26,7 +27,7 @@ import (
 func TestHttpConformance(t *testing.T) {
 	assert := With(t)
 
-	httpServerPort := pickPort()
+	httpServerPort := tcp.PickPort()
 	httpServer := &v2httptest.Server{
 		Port:        httpServerPort,
 		PathHandler: make(map[string]http.HandlerFunc),
@@ -35,9 +36,9 @@ func TestHttpConformance(t *testing.T) {
 	assert(err, IsNil)
 	defer httpServer.Close()
 
-	serverPort := pickPort()
+	serverPort := tcp.PickPort()
 	serverConfig := &core.Config{
-		Inbound: []*proxyman.InboundHandlerConfig{
+		Inbound: []*core.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortRange: net.SinglePortRange(serverPort),
@@ -46,7 +47,7 @@ func TestHttpConformance(t *testing.T) {
 				ProxySettings: serial.ToTypedMessage(&v2http.ServerConfig{}),
 			},
 		},
-		Outbound: []*proxyman.OutboundHandlerConfig{
+		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 			},
@@ -80,6 +81,62 @@ func TestHttpConformance(t *testing.T) {
 	CloseAllServers(servers)
 }
 
+func TestHttpError(t *testing.T) {
+	assert := With(t)
+
+	tcpServer := tcp.Server{
+		MsgProcessor: func(msg []byte) []byte {
+			return []byte{}
+		},
+	}
+	dest, err := tcpServer.Start()
+	assert(err, IsNil)
+	defer tcpServer.Close()
+
+	time.AfterFunc(time.Second*2, func() {
+		tcpServer.ShouldClose = true
+	})
+
+	serverPort := tcp.PickPort()
+	serverConfig := &core.Config{
+		Inbound: []*core.InboundHandlerConfig{
+			{
+				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+					PortRange: net.SinglePortRange(serverPort),
+					Listen:    net.NewIPOrDomain(net.LocalHostIP),
+				}),
+				ProxySettings: serial.ToTypedMessage(&v2http.ServerConfig{}),
+			},
+		},
+		Outbound: []*core.OutboundHandlerConfig{
+			{
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+			},
+		},
+	}
+
+	servers, err := InitializeServerConfigs(serverConfig)
+	assert(err, IsNil)
+
+	{
+		transport := &http.Transport{
+			Proxy: func(req *http.Request) (*url.URL, error) {
+				return url.Parse("http://127.0.0.1:" + serverPort.String())
+			},
+		}
+
+		client := &http.Client{
+			Transport: transport,
+		}
+
+		resp, err := client.Get("http://127.0.0.1:" + dest.Port.String())
+		assert(err, IsNil)
+		assert(resp.StatusCode, Equals, 503)
+	}
+
+	CloseAllServers(servers)
+}
+
 func TestHttpConnectMethod(t *testing.T) {
 	assert := With(t)
 
@@ -90,9 +147,9 @@ func TestHttpConnectMethod(t *testing.T) {
 	assert(err, IsNil)
 	defer tcpServer.Close()
 
-	serverPort := pickPort()
+	serverPort := tcp.PickPort()
 	serverConfig := &core.Config{
-		Inbound: []*proxyman.InboundHandlerConfig{
+		Inbound: []*core.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortRange: net.SinglePortRange(serverPort),
@@ -101,7 +158,7 @@ func TestHttpConnectMethod(t *testing.T) {
 				ProxySettings: serial.ToTypedMessage(&v2http.ServerConfig{}),
 			},
 		},
-		Outbound: []*proxyman.OutboundHandlerConfig{
+		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 			},
@@ -146,7 +203,7 @@ func TestHttpConnectMethod(t *testing.T) {
 func TestHttpPost(t *testing.T) {
 	assert := With(t)
 
-	httpServerPort := pickPort()
+	httpServerPort := tcp.PickPort()
 	httpServer := &v2httptest.Server{
 		Port: httpServerPort,
 		PathHandler: map[string]http.HandlerFunc{
@@ -169,9 +226,9 @@ func TestHttpPost(t *testing.T) {
 	assert(err, IsNil)
 	defer httpServer.Close()
 
-	serverPort := pickPort()
+	serverPort := tcp.PickPort()
 	serverConfig := &core.Config{
-		Inbound: []*proxyman.InboundHandlerConfig{
+		Inbound: []*core.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortRange: net.SinglePortRange(serverPort),
@@ -180,7 +237,7 @@ func TestHttpPost(t *testing.T) {
 				ProxySettings: serial.ToTypedMessage(&v2http.ServerConfig{}),
 			},
 		},
-		Outbound: []*proxyman.OutboundHandlerConfig{
+		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 			},
@@ -226,7 +283,7 @@ func setProxyBasicAuth(req *http.Request, user, pass string) {
 func TestHttpBasicAuth(t *testing.T) {
 	assert := With(t)
 
-	httpServerPort := pickPort()
+	httpServerPort := tcp.PickPort()
 	httpServer := &v2httptest.Server{
 		Port:        httpServerPort,
 		PathHandler: make(map[string]http.HandlerFunc),
@@ -235,9 +292,9 @@ func TestHttpBasicAuth(t *testing.T) {
 	assert(err, IsNil)
 	defer httpServer.Close()
 
-	serverPort := pickPort()
+	serverPort := tcp.PickPort()
 	serverConfig := &core.Config{
-		Inbound: []*proxyman.InboundHandlerConfig{
+		Inbound: []*core.InboundHandlerConfig{
 			{
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortRange: net.SinglePortRange(serverPort),
@@ -250,7 +307,7 @@ func TestHttpBasicAuth(t *testing.T) {
 				}),
 			},
 		},
-		Outbound: []*proxyman.OutboundHandlerConfig{
+		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 			},

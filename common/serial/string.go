@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// ToString serialize an abitrary value into string.
+// ToString serialize an arbitrary value into string.
 func ToString(v interface{}) string {
 	if v == nil {
 		return " "
@@ -20,19 +20,17 @@ func ToString(v interface{}) string {
 		return value.String()
 	case error:
 		return value.Error()
-	case []byte:
-		return BytesToHexString(value)
 	default:
 		return fmt.Sprintf("%+v", value)
 	}
 }
 
 func Concat(v ...interface{}) string {
-	values := make([]string, len(v))
-	for i, value := range v {
-		values[i] = ToString(value)
+	builder := strings.Builder{}
+	for _, value := range v {
+		builder.WriteString(ToString(value))
 	}
-	return strings.Join(values, "")
+	return builder.String()
 }
 
 func WriteString(s string) func([]byte) (int, error) {

@@ -1,11 +1,10 @@
 package main
 
-//go:generate go run $GOPATH/src/v2ray.com/core/common/errors/errorgen/main.go -pkg main -path Main
+//go:generate errorgen
 
 import (
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -14,6 +13,7 @@ import (
 
 	"v2ray.com/core"
 	"v2ray.com/core/common/platform"
+	"v2ray.com/core/main/confloader"
 	_ "v2ray.com/core/main/distro/all"
 )
 
@@ -49,32 +49,24 @@ func getConfigFilePath() string {
 	return ""
 }
 
-func GetConfigFormat() core.ConfigFormat {
+func GetConfigFormat() string {
 	switch strings.ToLower(*format) {
-	case "json":
-		return core.ConfigFormat_JSON
 	case "pb", "protobuf":
-		return core.ConfigFormat_Protobuf
+		return "protobuf"
 	default:
-		return core.ConfigFormat_JSON
+		return "json"
 	}
 }
 
 func startV2Ray() (core.Server, error) {
 	configFile := getConfigFilePath()
-	var configInput io.Reader
-	if configFile == "stdin:" {
-		configInput = os.Stdin
-	} else {
-		fixedFile := os.ExpandEnv(configFile)
-		file, err := os.Open(fixedFile)
-		if err != nil {
-			return nil, newError("config file not readable").Base(err)
-		}
-		defer file.Close()
-		configInput = file
+	configInput, err := confloader.LoadConfig(configFile)
+	if err != nil {
+		return nil, newError("failed to load config: ", configFile).Base(err)
 	}
-	config, err := core.LoadConfig(GetConfigFormat(), configInput)
+	defer configInput.Close()
+
+	config, err := core.LoadConfig(GetConfigFormat(), configFile, configInput)
 	if err != nil {
 		return nil, newError("failed to read config file: ", configFile).Base(err)
 	}
@@ -87,10 +79,17 @@ func startV2Ray() (core.Server, error) {
 	return server, nil
 }
 
+func printVersion() {
+	version := core.VersionStatement()
+	for _, s := range version {
+		fmt.Println(s)
+	}
+}
+
 func main() {
 	flag.Parse()
 
-	core.PrintVersion()
+	printVersion()
 
 	if *version {
 		return
@@ -106,7 +105,8 @@ func main() {
 	server, err := startV2Ray()
 	if err != nil {
 		fmt.Println(err.Error())
-		os.Exit(-1)
+		// Configuration error. Exit with a special value to prevent systemd from restarting.
+		os.Exit(23)
 	}
 
 	if *test {
